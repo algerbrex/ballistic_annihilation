@@ -26,54 +26,47 @@ function run_simulation()
     for _ = 1:FRAMES
         num_left = length(positions)
 
-        if num_left < 2
-            continue
-        end
-
-        indexes_to_delete = Set()
-
-        if velocities[1] == RIGHT_VEL && velocities[2] == LEFT_VEL
-            push!(indexes_to_delete, 1, 2)
-        elseif velocities[num_left] == LEFT_VEL && velocities[num_left - 1] == RIGHT_VEL
-            push!(indexes_to_delete, num_left, num_left - 1)
-        end
-
-        if num_left == 2
-            indexes = sort(collect(indexes_to_delete))
-            deleteat!(positions, indexes)
-            deleteat!(velocities, indexes)
-            continue
-        end
-
-        for i = 2:num_left - 1
-            if in(i, indexes_to_delete)
-                continue
+        if num_left <= 2
+            if velocities[1] != velocities[2]
+                # This is not technically correct to do, since a left moving arrow at 1
+                # would never collide with a right moving arrow at 2 in the simulation, but 
+                # on the infinite line these arrows would die as time tended towards infinity.
+                # Additionally this also simplifies the code.
+                positions = []
+                velocities = []
             end
+            break
+        end
 
-            if velocities[i] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
+        indexes_to_delete = []
+        i = 1
+        
+        while i <= num_left
+            if i + 1 <= num_left && velocities[i] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
                 push!(indexes_to_delete, i, i + 1)
-            elseif velocities[i] == LEFT_VEL && velocities[i - 1] == RIGHT_VEL
+                i += 1
+            elseif i - 1 >= 1 && velocities[i] == LEFT_VEL && velocities[i - 1] == RIGHT_VEL
                 push!(indexes_to_delete, i, i - 1)
             elseif velocities[i] == BLOCKADE_VEL
-                if velocities[i - 1] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
+                if i + 1 <= num_left && i - 1 >= 1 && velocities[i - 1] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
                     if abs(positions[i - 1] - positions[i]) < abs(positions[i + 1] - positions[i])
-                        push!(indexes_to_delete, i, i - 1)
+                        push!(indexes_to_delete, i - 1, i)
                     else
                         push!(indexes_to_delete, i, i + 1)
+                        i += 1
                     end
-                elseif velocities[i - 1] == RIGHT_VEL
-                    push!(indexes_to_delete, i, i - 1)
-                elseif velocities[i + 1] == LEFT_VEL
+                elseif i - 1 >= 1 && velocities[i - 1] == RIGHT_VEL
+                    push!(indexes_to_delete, i - 1, i)
+                elseif i + 1 <= num_left && velocities[i + 1] == LEFT_VEL
                     push!(indexes_to_delete, i, i + 1)
+                    i += 1
                 end
             end
+            i += 1
         end
 
-        indexes = collect(indexes_to_delete)
-        sort!(indexes)
-
-        deleteat!(positions, indexes)
-        deleteat!(velocities, indexes)
+        deleteat!(positions, indexes_to_delete)
+        deleteat!(velocities, indexes_to_delete)
     end
             
     println("\nNumber of left moving particles at end: ", sum(velocities .== LEFT_VEL))
