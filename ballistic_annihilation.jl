@@ -25,19 +25,6 @@ function run_simulation()
 
     for _ = 1:FRAMES
         num_left = length(positions)
-
-        if num_left <= 2
-            if velocities[1] != velocities[2]
-                # This is not technically correct to do, since a left moving arrow at 1
-                # would never collide with a right moving arrow at 2 in the simulation, but 
-                # on the infinite line these arrows would die as time tended towards infinity.
-                # Additionally this also simplifies the code.
-                positions = []
-                velocities = []
-            end
-            break
-        end
-
         indexes_to_delete = []
         i = 1
         
