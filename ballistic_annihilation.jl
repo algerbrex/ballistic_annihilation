@@ -6,10 +6,10 @@ const FRAMES                  = 200
 const RANGE_LOWER_BOUND       = -1000
 const RANGE_UPPER_BOUND       = 1000
 const NUM_OF_PARTICLES        = 500
-const PROBABILITY_OF_BLOCKADE = 0.45
+const PROBABILITY_OF_BLOCKADE = 0.3
 
-const A                       = .5
-const B                       = .25
+const A                       = .80
+const B                       = .1
 const C                       = 1 - (A + B)
 
 const LEFT_VEL                = 0
@@ -122,7 +122,7 @@ function create_diagram(data, max_dist_traveled)
         push!(lines, (x_coords, y_coords, vel_and_dist[1]))
     end
 
-    plt = plot(legend=false, xlims=(-1000, 1000), ylims=(0, max_dist_traveled * 2.5))
+    plt = plot(legend=false, xlims=(-1000, 1000), ylims=(0, max_dist_traveled * 3), axis=([], false))
 
     for line in lines
         color = "Light Coral"
