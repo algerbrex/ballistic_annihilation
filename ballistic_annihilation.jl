@@ -9,10 +9,10 @@ const RANGE_TO_COUNT_UPPER_BOUND = RANGE_UPPER_BOUND / 3
 const NUM_OF_PARTICLES           = 5_000_000
 const PROBABILITY_OF_BLOCKADE    = 0.3
 
-const PROBABILITY_ARROW_SURVIES         = .1
-const PROBABILITY_BLOCKADE_SURVIVES     = .9
-const PROBABILITY_OF_MUTAL_ANNIHILATION =  1 - (PROBABILITY_ARROW_SURVIES + PROBABILITY_BLOCKADE_SURVIVES)
-const ALPHA                             = 0.1
+const PROBABILITY_ARROW_SURVIES         = 0
+const PROBABILITY_BLOCKADE_SURVIVES     = 0
+const PROBABILITY_OF_MUTAL_ANNIHILATION = 1 - (PROBABILITY_ARROW_SURVIES + PROBABILITY_BLOCKADE_SURVIVES)
+const ALPHA                             = 0
 
 const LEFT_VEL                = 0
 const RIGHT_VEL               = 1
@@ -60,11 +60,11 @@ function run_simulation()
         
         while i <= num_left
             if i + 1 <= num_left && velocities[i] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
-                collision_result = sample([[i + 1], [i], [i, i + 1]], BLOCKADE_ARROW_COLLISION_WEIGHTS)
+                collision_result = sample([[i + 1], [i], [i, i + 1]], ARROW_ARROW_COLLISION_WEIGHTS)
                 push!(indexes_to_delete, collision_result...)
                 i += 1
             elseif i - 1 >= 1 && velocities[i] == LEFT_VEL && velocities[i - 1] == RIGHT_VEL
-                collision_result = sample([[i], [i - 1], [i, i - 1]], BLOCKADE_ARROW_COLLISION_WEIGHTS)
+                collision_result = sample([[i], [i - 1], [i - 1, i]], ARROW_ARROW_COLLISION_WEIGHTS)
                 push!(indexes_to_delete, collision_result...)
             elseif velocities[i] == BLOCKADE_VEL
                 if i + 1 <= num_left && i - 1 >= 1 && velocities[i - 1] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
