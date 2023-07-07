@@ -3,12 +3,12 @@ import Distributions: Uniform
 import StatsBase: sample, Weights
 
 const FRAMES                  = 200
-const RANGE_LOWER_BOUND       = -3000
-const RANGE_UPPER_BOUND       = 3000
+const RANGE_LOWER_BOUND       = -200
+const RANGE_UPPER_BOUND       = 200
 const RANGE_TO_COUNT_LOWER_BOUND = RANGE_LOWER_BOUND / 1
 const RANGE_TO_COUNT_UPPER_BOUND = RANGE_UPPER_BOUND / 1
-const NUM_OF_PARTICLES        = 1200
-const PROBABILITY_OF_BLOCKADE = 0.18
+const NUM_OF_PARTICLES        = 50
+const PROBABILITY_OF_BLOCKADE = 0.14
 
 
 const PROBABILITY_ARROW_SURVIES         = 1/3
