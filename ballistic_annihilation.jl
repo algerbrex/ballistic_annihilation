@@ -7,16 +7,17 @@ const RANGE_UPPER_BOUND          = 30000
 const RANGE_TO_COUNT_LOWER_BOUND = RANGE_LOWER_BOUND / 3
 const RANGE_TO_COUNT_UPPER_BOUND = RANGE_UPPER_BOUND / 3
 const NUM_OF_PARTICLES           = 5_000_000
-const PROBABILITY_OF_BLOCKADE    = 0.3
+const PROBABILITY_OF_BLOCKADE    = 0.25
 
-const PROBABILITY_ARROW_SURVIES         = 1/9
-const PROBABILITY_BLOCKADE_SURVIVES     = 3/4
-const PROBABILITY_OF_MUTAL_ANNIHILATION = 1 - (PROBABILITY_ARROW_SURVIES + PROBABILITY_BLOCKADE_SURVIVES)
-const PROBABILITY_OF_ARROW_SURVIVAL     = 1/2
+const PROBABILITY_ARROW_SURVIES_BLOCKADE  = 0
+const PROBABILITY_BLOCKADE_SURVIVES_ARROW = 0
+const PROBABILITY_ARROW_SURVIVES_ARROW    = 0
+const PROBABILITY_OF_BLOCKADE_GEN         = 0
 
 const LEFT_VEL                = 0
 const RIGHT_VEL               = 1
 const BLOCKADE_VEL            = 2
+const BLOCKADE_GENERATED      = 3
 
 VELOCITIES            = [BLOCKADE_VEL, LEFT_VEL, RIGHT_VEL]
 ASSIGNMENT_WEIGHTS = Weights([
@@ -26,15 +27,16 @@ ASSIGNMENT_WEIGHTS = Weights([
 ])
 
 BLOCKADE_ARROW_COLLISION_WEIGHTS = Weights([
-    PROBABILITY_OF_MUTAL_ANNIHILATION, 
-    PROBABILITY_BLOCKADE_SURVIVES,
-    PROBABILITY_ARROW_SURVIES
+    1 - (PROBABILITY_ARROW_SURVIES_BLOCKADE + PROBABILITY_BLOCKADE_SURVIVES_ARROW),
+    PROBABILITY_BLOCKADE_SURVIVES_ARROW,
+    PROBABILITY_ARROW_SURVIES_BLOCKADE
 ])
 
 ARROW_ARROW_COLLISION_WEIGHTS = Weights([
-    PROBABILITY_OF_ARROW_SURVIVAL / 2, # Right arrow survives
-    PROBABILITY_OF_ARROW_SURVIVAL / 2, # Left arrow survives
-    1 - PROBABILITY_OF_ARROW_SURVIVAL  # Both arrows are annihilated
+    PROBABILITY_ARROW_SURVIVES_ARROW / 2,
+    PROBABILITY_ARROW_SURVIVES_ARROW / 2,
+    PROBABILITY_OF_BLOCKADE_GEN,
+    1 - (PROBABILITY_ARROW_SURVIVES_ARROW + PROBABILITY_OF_BLOCKADE_GEN)
 ])
 
 
@@ -56,18 +58,23 @@ function run_simulation()
     for _ = 1:FRAMES
         num_left = length(positions)
         indexes_to_delete = []
+        blockades_to_generate = []
         i = 1
         
         while i <= num_left
             particles_dying = []
             if i + 1 <= num_left && velocities[i] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
-                particles_dying = sample([[i + 1], [i], [i, i + 1]], ARROW_ARROW_COLLISION_WEIGHTS)
+                collision_result = sample([[i + 1], [i], BLOCKADE_GENERATED, [i, i + 1]], ARROW_ARROW_COLLISION_WEIGHTS)
+                if collision_result == BLOCKADE_GENERATED
+                    particles_dying = [i + 1]
+                    push!(blockades_to_generate, (i, (positions[i + 1] - positions[i]) / 2))
+                else
+                    particles_dying = collision_result
+                end
                 i += 1
-            elseif i - 1 >= 1 && velocities[i] == LEFT_VEL && velocities[i - 1] == RIGHT_VEL
-                particles_dying = sample([[i], [i - 1], [i - 1, i]], ARROW_ARROW_COLLISION_WEIGHTS)
             elseif velocities[i] == BLOCKADE_VEL
                 if i + 1 <= num_left && i - 1 >= 1 && velocities[i - 1] == RIGHT_VEL && velocities[i + 1] == LEFT_VEL
-                    if abs(positions[i - 1] - positions[i]) < abs(positions[i + 1] - positions[i])
+                    if (positions[i] - positions[i - 1]) < (positions[i + 1] - positions[i])
                         particles_dying = sample([[i - 1, i], [i - 1], [i]], BLOCKADE_ARROW_COLLISION_WEIGHTS)
                     else
                         particles_dying = sample([[i, i + 1], [i + 1], [i]], BLOCKADE_ARROW_COLLISION_WEIGHTS)
@@ -83,6 +90,11 @@ function run_simulation()
 
             push!(indexes_to_delete, particles_dying...)
             i += 1
+        end
+
+        for blockade in blockades_to_generate
+            positions[blockade[1]] = blockade[2]
+            velocities[blockade[1]] = BLOCKADE_VEL
         end
 
         deleteat!(positions, indexes_to_delete)
