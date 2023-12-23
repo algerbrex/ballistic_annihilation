@@ -1,143 +1,202 @@
 import Distributions: Uniform
 import StatsBase: sample, Weights
 
-const LEFT_VEL      = '<'
-const RIGHT_VEL     = '>'
-const BLOCKADE_VEL  = '*'
+const LEFT_VEL::Int8     = -1
+const RIGHT_VEL::Int8    =  1
+const BLOCKADE_VEL::Int8 =  0
 
-const RIGHT_ARROW_LIVES::UInt8  = 1
-const LEFT_ARROW_LIVES::UInt8   = 2
-const ARROW_SURVIVES::UInt8     = 3
-const BLOCKADE_LIVES::UInt8     = 4
-const MUTAL_ANNIHILATION::UInt8 = 5
-const BLOCKADE_GENERATED::UInt8 = 6
+const NO_COLLISION::UInt8   = 0
+const RIGHT_LEFT::UInt8     = 1
+const RIGHT_BLOCKADE::UInt8 = 2
+const BLOCKADE_LEFT::UInt8  = 3
 
-mutable struct ParticleSystem
-    positions::Vector{Float64}
-    velocities::Vector{Char}
+const DELETE_CURRENT::UInt8  = 1
+const DELETE_ADJACENT::UInt8 = 2
+const DELETE_BOTH::UInt8     = 3
+const DEFAULT_VALUE::UInt8   = 4
+
+mutable struct Particle
+    pos::Float32
+    vel::Int8
+    left::Union{Nothing, Particle}
+    right::Union{Nothing, Particle}
 end
 
-@inline
-function sort_small_list(lst::Vector{Int64})::Vector{Int64}
-    return lst[2] < lst[1] ? [lst[2], lst[1]] : lst
-end
 
-function make_particle_system(pos_bound, num_particles, prob_blockade)
-    positions = sort(rand(Uniform(-pos_bound, pos_bound), num_particles))
+COLLISION_TYPE_MAP = Dict(
+    (RIGHT_VEL, RIGHT_VEL) => NO_COLLISION,
+    (RIGHT_VEL, LEFT_VEL) => RIGHT_LEFT,
+    (RIGHT_VEL, BLOCKADE_VEL) => RIGHT_BLOCKADE,
+
+    (LEFT_VEL, LEFT_VEL) => NO_COLLISION,
+    (LEFT_VEL, RIGHT_VEL) => NO_COLLISION,
+    (LEFT_VEL, BLOCKADE_VEL) => NO_COLLISION,
+
+    (BLOCKADE_VEL, BLOCKADE_VEL) => NO_COLLISION,
+    (BLOCKADE_VEL, LEFT_VEL) => BLOCKADE_LEFT,
+    (BLOCKADE_VEL, RIGHT_VEL) => NO_COLLISION,
+)
+
+
+function initalize_particle_linked_list(min_pos, max_pos, num_particles, prob_blockade)
     vel_weights = Weights([prob_blockade, (1 - prob_blockade) / 2, (1 - prob_blockade) / 2])
     velocities = sample([BLOCKADE_VEL, LEFT_VEL, RIGHT_VEL], vel_weights, num_particles)
-    return ParticleSystem(positions, velocities)
-end
+    positions = sort(rand(Uniform(min_pos, max_pos), num_particles))
 
-function resolve_arrow_arrow_collisions(ps::ParticleSystem, arrow_arrow_outcome::Vector{UInt8})
-    matches = eachmatch(r"\>\<", string(ps.velocities...))
-    indexes = []
-    for match in matches
-        outcome = pop!(arrow_arrow_outcome)
-        right_arrow_idx, left_arrow_idx = match.offset, match.offset + 1
+    head = Particle(positions[1], velocities[1], nothing, nothing)
+    prev = head
 
-        if outcome == RIGHT_ARROW_LIVES
-            ps.positions[right_arrow_idx] = ps.positions[left_arrow_idx]
-            push!(indexes, left_arrow_idx)
-        elseif outcome == LEFT_ARROW_LIVES
-            ps.positions[left_arrow_idx] = ps.positions[right_arrow_idx]
-            push!(indexes, right_arrow_idx)
-        elseif outcome == BLOCKADE_GENERATED
-            ps.positions[right_arrow_idx] = (ps.positions[left_arrow_idx] - ps.positions[right_arrow_idx]) / 2
-            ps.velocities[right_arrow_idx] = BLOCKADE_VEL
-            push!(indexes, left_arrow_idx)
-        else
-            push!(indexes, right_arrow_idx, left_arrow_idx)
-        end
-    end
-    deleteat!(ps.positions, indexes)
-    deleteat!(ps.velocities, indexes)
-end
-
-function resolve_arrow_blockade_collisions(ps::ParticleSystem, arrow_blockade_outcomes::Vector{UInt8})
-    matches = findall(r"(\>\*+\<)|(\>\*+\>)|(\<\*+\<)", *(ps.velocities...))
-    indexes = []
-
-    for group in matches
-        head, tail = first(group), last(group)
-        outcome = pop!(arrow_blockade_outcomes)
-        arrow_idx, blockade_idx = -1, -1
- 
-        if ps.velocities[head] == RIGHT_VEL && ps.velocities[tail] == LEFT_VEL &&  length(group) == 3
-            blockade_idx = head + 1
-            if ps.positions[blockade_idx] - ps.positions[head] < ps.positions[tail] - ps.positions[blockade_idx]
-                arrow_idx = head
-            else
-                arrow_idx = tail
-            end
-        elseif ps.velocities[head] == RIGHT_VEL && ps.velocities[tail] == LEFT_VEL &&  length(group) > 3
-            right_blockade_idx, left_blockade_idx = head + 1, tail - 1
-            if ps.positions[right_blockade_idx] - ps.positions[head] < ps.positions[tail] - ps.positions[left_blockade_idx]
-                blockade_idx = right_blockade_idx
-                arrow_idx = head
-            else
-                blockade_idx = left_blockade_idx
-                arrow_idx = tail
-            end
-        elseif ps.velocities[head] == RIGHT_VEL
-            arrow_idx, blockade_idx = head, head + 1
-        else
-            arrow_idx, blockade_idx = tail, tail - 1
-        end
-
-        if outcome == ARROW_SURVIVES
-            ps.positions[arrow_idx] = ps.positions[blockade_idx]
-            push!(indexes, blockade_idx)
-        elseif outcome == BLOCKADE_LIVES
-            push!(indexes, arrow_idx)
-        else
-            push!(indexes, sort_small_list([arrow_idx, blockade_idx])...)
-        end
+    for i = 2:num_particles
+        curr = Particle(positions[i], velocities[i], prev, nothing)
+        prev.right = curr
+        prev = curr
     end
 
-    deleteat!(ps.positions, indexes)
-    deleteat!(ps.velocities, indexes)
+    return head
 end
 
-function resolve_collisions(ps::ParticleSystem, arrow_arrow_outcomes::Vector{UInt8}, arrow_blockade_outcomes::Vector{UInt8})
-    resolve_arrow_arrow_collisions(ps, arrow_arrow_outcomes)
-    resolve_arrow_blockade_collisions(ps, arrow_blockade_outcomes)
+
+function delete_particle(head, particle)
+    if isnothing(particle.left)
+        head = particle.right
+        head.left = nothing
+    elseif isnothing(particle.right)
+        adj_left = particle.left
+        adj_left.right = nothing
+    else
+        left = particle.left
+        right = particle.right
+        left.right = right
+        right.left = left
+    end
+
+    return head
 end
 
-function print_particle_counts(ps::ParticleSystem, pos_bound)
-    third = pos_bound / 3
-    println("<: ", sum([1 for p in ps.velocities if p[1] == LEFT_VEL]))
-    println(">: ", sum([1 for p in ps.velocities if p[1] == RIGHT_VEL]))
-    println("*: ", sum([1 for p in ps.velocities if p[1] == BLOCKADE_VEL]))
+
+function find_next_collision_starting_node(head)
+    curr = head
+    collision_start = nothing
+    smallest_dist = Inf
+
+    while !isnothing(curr.right)
+        collision_type = COLLISION_TYPE_MAP[(curr.vel, curr.right.vel)]
+
+        if collision_type == NO_COLLISION
+            curr = curr.right
+            continue
+        end
+
+        distance = curr.right.pos - curr.pos
+
+        if collision_type == RIGHT_LEFT
+            distance /= 2
+        end
+
+        if distance < smallest_dist
+            collision_start = curr
+            smallest_dist = distance
+        end
+        curr = curr.right
+    end
+
+    return collision_start, smallest_dist
 end
 
-function simulate(;steps=1, pos_bound=1_000, num_particles=100, p=0.25, a=0, b=0, α=0, β=0)
-    ps = make_particle_system(pos_bound, num_particles, p)
+
+function perform_collision(head, collision_start, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
+    collision_type = COLLISION_TYPE_MAP[(collision_start.vel, collision_start.right.vel)]
+    outcome = DEFAULT_VALUE
+
+    if collision_type == RIGHT_LEFT
+        outcome = pop!(left_right_arrow_outcomes)
+    elseif collision_type == RIGHT_BLOCKADE
+        outcome = pop!(right_arrow_blockade_outcomes)
+    else
+        outcome = pop!(blockade_left_arrow_outcomes)
+    end
+
+    if outcome == DELETE_CURRENT
+        head = delete_particle(head, collision_start)
+    elseif outcome == DELETE_ADJACENT
+        head = delete_particle(head, collision_start.right)
+    else
+        head = delete_particle(head, collision_start)
+        head = delete_particle(head, collision_start.right)
+    end
+
+    return head
+end
+
+
+function update_positions(head, distance)
+    curr = head
+    while !isnothing(curr)
+        curr.pos += curr.vel * distance
+        curr = curr.right
+    end
+end
+
+
+function resolve_next_collision(head, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
+    collision_start, distance = find_next_collision_starting_node(head)
+
+    if isnothing(collision_start)
+        return head
+    end
+
+    head = perform_collision(head, collision_start, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
+    update_positions(head, distance)
+    return head
+end
+
+
+function print_particle_counts(head)
+    particle_type_count = Dict(LEFT_VEL => 0, RIGHT_VEL => 0, BLOCKADE_VEL => 0)
+    curr = head
+
+    while !isnothing(curr)
+        particle_type_count[curr.vel] += 1
+        curr = curr.right
+    end
+
+    println("<: ", particle_type_count[LEFT_VEL])
+    println(">: ", particle_type_count[RIGHT_VEL])
+    println("*: ", particle_type_count[BLOCKADE_VEL])
+end
+
+
+function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.27, a=0, b=0, α=0, β=0)
+    head = initalize_particle_linked_list(min_pos, max_pos, num_particles, p)
+
     println("Before:")
-    print_particle_counts(ps, pos_bound)
+    print_particle_counts(head)
 
-    arrow_arrow_outcomes = sample(
-        [RIGHT_ARROW_LIVES, LEFT_ARROW_LIVES, BLOCKADE_GENERATED, MUTAL_ANNIHILATION], 
-        Weights([a / 2, a / 2, b, 1 - (a + b)]), 
+    left_right_arrow_outcomes = sample(
+        [DELETE_CURRENT, DELETE_ADJACENT, DELETE_BOTH], 
+        Weights([a / 2, a / 2, 1 - a]), 
         num_particles
     )
 
-    arrow_blockade_outcomes = sample(
-        [ARROW_SURVIVES, BLOCKADE_LIVES, MUTAL_ANNIHILATION], 
+    right_arrow_blockade_outcomes = sample(
+        [DELETE_ADJACENT, DELETE_CURRENT, DELETE_BOTH], 
+        Weights([α, β, 1 - (α + β)]),
+        num_particles
+    )
+
+    blockade_left_arrow_outcomes = sample(
+        [DELETE_CURRENT, DELETE_ADJACENT, DELETE_BOTH], 
         Weights([α, β, 1 - (α + β)]),
         num_particles
     )
 
     for _ = 1:steps
-        resolve_collisions(ps, arrow_arrow_outcomes, arrow_blockade_outcomes)
+        head = resolve_next_collision(head, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
     end
 
-    println("\nAfter ", steps, " time step(s):")
-    print_particle_counts(ps, pos_bound)
+    println("\nAfter ", steps, " step(s):")
+    print_particle_counts(head)
 end
 
-simulate(
-    steps=1,
-    pos_bound=10_000,
-    num_particles=1_000_000
-)
+
+simulate()
