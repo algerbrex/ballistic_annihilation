@@ -166,7 +166,7 @@ function print_particle_counts(head)
 end
 
 
-function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.27, a=0, b=0, α=0, β=0)
+function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.25, a=0, α=0, β=0)
     head = initalize_particle_linked_list(min_pos, max_pos, num_particles, p)
 
     println("Before:")
