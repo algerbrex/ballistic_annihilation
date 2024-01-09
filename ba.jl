@@ -142,12 +142,12 @@ function resolve_next_collision(head, left_right_arrow_outcomes, right_arrow_blo
     collision_start, distance = find_next_collision_starting_node(head)
 
     if isnothing(collision_start)
-        return head
+        return head, false
     end
 
     head = perform_collision(head, collision_start, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
     update_positions(head, distance)
-    return head
+    return head, true
 end
 
 
@@ -190,11 +190,27 @@ function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=1
         num_particles
     )
 
+    steps_taken = 0
     for _ = 1:steps
-        head = resolve_next_collision(head, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
+        steps_taken += 1
+
+        head, collisions_occuring = resolve_next_collision(
+            head, left_right_arrow_outcomes, 
+            right_arrow_blockade_outcomes, 
+            blockade_left_arrow_outcomes
+        )
+
+        if !collisions_occuring
+            println(
+                "\nSimulation ended after ", 
+                steps_taken, 
+                " step(s) as no more collisions could occur."
+            )
+            break
+        end
     end
 
-    println("\nAfter ", steps, " step(s):")
+    println("\nAfter ", steps_taken, " step(s):")
     print_particle_counts(head)
 end
 
