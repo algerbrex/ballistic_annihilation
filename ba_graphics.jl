@@ -11,10 +11,11 @@ const RIGHT_LEFT::UInt8     = 1
 const RIGHT_BLOCKADE::UInt8 = 2
 const BLOCKADE_LEFT::UInt8  = 3
 
-const DELETE_CURRENT::UInt8  = 1
-const DELETE_ADJACENT::UInt8 = 2
-const DELETE_BOTH::UInt8     = 3
-const DEFAULT_VALUE::UInt8   = 4
+const DELETE_CURRENT::UInt8    = 1
+const DELETE_ADJACENT::UInt8   = 2
+const DELETE_BOTH::UInt8       = 3
+const GENERATE_BLOCKADE::UInt8 = 4
+const DEFAULT_VALUE::UInt8     = 5
 
 mutable struct Particle
     pos::Float32
@@ -27,6 +28,7 @@ end
 
 mutable struct ParticleInfo
     final_pos::Float64
+    init_time::Float64
     time_lived::Float64
     vel::Float64
 end
@@ -68,6 +70,28 @@ function initalize_particle_linked_list(min_pos, max_pos, num_particles, prob_bl
         prev = curr
     end
 
+    return head
+end
+
+
+function insert_particle_right(particle_to_insert_at, particle_to_insert)
+    right = particle_to_insert_at.right
+    particle_to_insert_at.right = particle_to_insert
+    particle_to_insert.left = particle_to_insert_at
+    particle_to_insert.right = right
+
+    if !isnothing(right)
+        right.left = particle_to_insert
+    end
+end
+
+function insert_particle_left(particle_to_insert_at, particle_to_insert)
+    # This function will only be called if we're inserting a particle to the 
+    # the left of the current head, so that's the only case that needs to be
+    # dealt with.
+    head = particle_to_insert
+    head.right = particle_to_insert_at
+    particle_to_insert_at.left = head
     return head
 end
 
@@ -123,7 +147,8 @@ end
 
 
 function perform_collision(
-        head, collision_start, 
+        head, collision_start,
+        midpoint, particle_info,
         left_right_arrow_outcomes, 
         right_arrow_blockade_outcomes, 
         blockade_left_arrow_outcomes
@@ -144,6 +169,25 @@ function perform_collision(
         head = delete_particle(head, collision_start)
     elseif outcome == DELETE_ADJACENT
         head = delete_particle(head, collision_start.right)
+    elseif outcome == GENERATE_BLOCKADE
+        head = delete_particle(head, collision_start)
+        head = delete_particle(head, collision_start.right)
+
+        generated_blockade = Particle(midpoint, midpoint, BLOCKADE_VEL, nothing, nothing)
+
+        # If the head of the linked list was the left particle deleted, we need to do a left insertion, since
+        # the head of the linked list had no left. Otherwise, a right insertion needs to be performed.
+        if isnothing(collision_start.left)
+            head = insert_particle_left(head, generated_blockade)
+        else
+            insert_particle_right(collision_start.left, generated_blockade)
+        end
+
+        init_time = particle_info[collision_start.init_pos].time_lived
+        particle_info[generated_blockade.init_pos] = ParticleInfo(
+            generated_blockade.init_pos, init_time,
+            0.0, BLOCKADE_VEL
+        )
     else
         head = delete_particle(head, collision_start)
         head = delete_particle(head, collision_start.right)
@@ -191,6 +235,10 @@ function resolve_next_collision(
         return head, 100
     end
 
+    # Get the midpoint between the particles incase it's a left-right arrow collision and we need
+    # to generate a blockade where they meet.
+    midpoint = (collision_start.pos + collision_start.right.pos) / 2
+
     # Just in case either the particle at the start of the collision or the adjacent particle to the
     # right of it are annihilated, or both, save both of their current positions and times.
     update_particle_info(collision_start, particle_info, distance, curr_time)
@@ -198,6 +246,7 @@ function resolve_next_collision(
 
     head = perform_collision(
         head, collision_start, 
+        midpoint, particle_info,
         left_right_arrow_outcomes, 
         right_arrow_blockade_outcomes, 
         blockade_left_arrow_outcomes
@@ -223,15 +272,15 @@ function print_particle_counts(head)
 end
 
 
-function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.25, a=0, α=0, β=0)
+function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.25, a=0, b=0, α=0, β=0)
     head = initalize_particle_linked_list(min_pos, max_pos, num_particles, p)
 
     println("Before:")
     print_particle_counts(head)
 
     left_right_arrow_outcomes = sample(
-        [DELETE_CURRENT, DELETE_ADJACENT, DELETE_BOTH], 
-        Weights([a / 2, a / 2, 1 - a]), 
+        [DELETE_CURRENT, DELETE_ADJACENT, GENERATE_BLOCKADE, DELETE_BOTH], 
+        Weights([a / 2, a / 2, b, 1 - (a + b)]), 
         num_particles
     )
 
@@ -252,7 +301,7 @@ function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=1
 
     curr = head
     while !isnothing(curr)
-        particle_info[curr.init_pos] = ParticleInfo(curr.init_pos, 0.0, curr.vel)
+        particle_info[curr.init_pos] = ParticleInfo(curr.init_pos, 0.0, 0.0, curr.vel)
         curr = curr.right
     end
 
@@ -278,7 +327,7 @@ function create_diagram(particle_info, pos_min, pos_max)
 
     for (pos, info) in particle_info
         x_coords = [pos, info.final_pos] 
-        y_coords = [0.0, info.time_lived]
+        y_coords = [info.init_time, info.time_lived]
         push!(lines, Line(x_coords, y_coords, info.vel))
 
         if info.time_lived > max_time_survived
@@ -309,12 +358,13 @@ end
 # of steps taken.
 
 particle_info = simulate(
-    ;steps=75, 
+    ;steps=85, 
     num_particles=100, 
     min_pos=-50_000, 
     max_pos=50_000, 
-    p=0.25,
-    a=1/3,
+    p=0.15,
+    a=0.35,
+    b=0.35,
     α=1/3, 
     β=1/3
 )
