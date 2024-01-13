@@ -10,10 +10,11 @@ const RIGHT_LEFT::UInt8     = 1
 const RIGHT_BLOCKADE::UInt8 = 2
 const BLOCKADE_LEFT::UInt8  = 3
 
-const DELETE_CURRENT::UInt8  = 1
-const DELETE_ADJACENT::UInt8 = 2
-const DELETE_BOTH::UInt8     = 3
-const DEFAULT_VALUE::UInt8   = 4
+const DELETE_CURRENT::UInt8    = 1
+const DELETE_ADJACENT::UInt8   = 2
+const DELETE_BOTH::UInt8       = 3
+const GENERATE_BLOCKADE::UInt8 = 4
+const DEFAULT_VALUE::UInt8     = 5
 
 mutable struct Particle
     pos::Float32
@@ -52,6 +53,29 @@ function initalize_particle_linked_list(min_pos, max_pos, num_particles, prob_bl
         prev = curr
     end
 
+    return head
+end
+
+
+function insert_particle_right(particle_to_insert_at, particle_to_insert)
+    right = particle_to_insert_at.right
+    particle_to_insert_at.right = particle_to_insert
+    particle_to_insert.left = particle_to_insert_at
+    particle_to_insert.right = right
+
+    if !isnothing(right)
+        right.left = particle_to_insert
+    end
+end
+
+
+function insert_particle_left(particle_to_insert_at, particle_to_insert)
+    # This function will only be called if we're inserting a particle to the 
+    # the left of the current head, so that's the only case that needs to be
+    # dealt with.
+    head = particle_to_insert
+    head.right = particle_to_insert_at
+    particle_to_insert_at.left = head
     return head
 end
 
@@ -104,7 +128,12 @@ function find_next_collision_starting_node(head)
 end
 
 
-function perform_collision(head, collision_start, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
+function perform_collision(
+    head, collision_start, midpoint, 
+    left_right_arrow_outcomes, 
+    right_arrow_blockade_outcomes, 
+    blockade_left_arrow_outcomes
+)
     collision_type = COLLISION_TYPE_MAP[(collision_start.vel, collision_start.right.vel)]
     outcome = DEFAULT_VALUE
 
@@ -120,6 +149,19 @@ function perform_collision(head, collision_start, left_right_arrow_outcomes, rig
         head = delete_particle(head, collision_start)
     elseif outcome == DELETE_ADJACENT
         head = delete_particle(head, collision_start.right)
+    elseif outcome == GENERATE_BLOCKADE
+        head = delete_particle(head, collision_start)
+        head = delete_particle(head, collision_start.right)
+
+        generated_blockade = Particle(midpoint, BLOCKADE_VEL, nothing, nothing)
+
+        # If the head of the linked list was the left particle deleted, we need to do a left insertion, since
+        # the head of the linked list had no left. Otherwise, a right insertion needs to be performed.
+        if isnothing(collision_start.left)
+            head = insert_particle_left(head, generated_blockade)
+        else
+            insert_particle_right(collision_start.left, generated_blockade)
+        end
     else
         head = delete_particle(head, collision_start)
         head = delete_particle(head, collision_start.right)
@@ -145,7 +187,17 @@ function resolve_next_collision(head, left_right_arrow_outcomes, right_arrow_blo
         return head, false
     end
 
-    head = perform_collision(head, collision_start, left_right_arrow_outcomes, right_arrow_blockade_outcomes, blockade_left_arrow_outcomes)
+    # Get the midpoint between the particles incase it's a left-right arrow collision and we need
+    # to generate a blockade where they meet.
+    midpoint = (collision_start.pos + collision_start.right.pos) / 2
+
+    head = perform_collision(
+        head, collision_start, midpoint, 
+        left_right_arrow_outcomes, 
+        right_arrow_blockade_outcomes, 
+        blockade_left_arrow_outcomes
+    )
+
     update_positions(head, distance)
     return head, true
 end
@@ -166,15 +218,15 @@ function print_particle_counts(head)
 end
 
 
-function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.25, a=0, α=0, β=0)
+function simulate(;steps=100_000, min_pos=-1_000, max_pos=1_000, num_particles=100_000, p=0.25, a=0, b=0, α=0, β=0)
     head = initalize_particle_linked_list(min_pos, max_pos, num_particles, p)
 
     println("Before:")
     print_particle_counts(head)
 
     left_right_arrow_outcomes = sample(
-        [DELETE_CURRENT, DELETE_ADJACENT, DELETE_BOTH], 
-        Weights([a / 2, a / 2, 1 - a]), 
+        [DELETE_CURRENT, DELETE_ADJACENT, GENERATE_BLOCKADE, DELETE_BOTH], 
+        Weights([a / 2, a / 2, b, 1 - (a + b)]), 
         num_particles
     )
 
