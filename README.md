@@ -18,7 +18,7 @@ four-parameters probability parameters $a, b, \alpha, \beta$ (again,
 where $a, b, \alpha, \beta \in [0, 1]$). An full overview of all of the possible reactions and
 their probabilities is given in the image below:
 
-![FCBA model summary](media\fcba_model_summary.png)
+![FCBA model summary](media/fcba_model_summary.png)
 
 Where a particle with a dot over it denotes a blockade, a particle with a right arrow over it
 denotes a right arrow, a particle with a left arrow over it denotes a left arrow, and the empty
@@ -103,7 +103,7 @@ collision.
 Alternatively, `ba_graphics.jl` can be run to produce images of time-space diagrams of FCBA.
 An example of such a picture is given below:
 
-![Example FCBA graphic](media\ba_pic_p15_all333_4.png)
+![Example FCBA graphic](media/ba_pic_p15_all333_4.png)
 
 Where particle position is on the x-axis and particle survival time is on the y-axis. Red lines
 are arrows and blue lines are blockades.
